@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HEADER,makeEntry,parseRows,totals,volume,localInput} from '../public/model.js';
+import {elapsedLabel,timerSeconds,editRowIndex} from '../public/model.js';
+test('elapsed labels cross hours and handle empty or future entries',()=>{const now=Date.parse('2026-01-01T12:00Z');assert.equal(elapsedLabel('2026-01-01T09:55Z',now),'2h 5m ago');assert.equal(elapsedLabel(null,now),'No entries yet');assert.equal(elapsedLabel('2026-01-01T12:01Z',now),'0h 0m ago');});
+test('timer uses elapsed wall time across suspension and pause',()=>{assert.equal(timerSeconds({elapsed:65000,started:1000},126000),190);assert.equal(timerSeconds({elapsed:65000,started:null},999999),65);});
+test('editing finds moved rows and rejects external changes or duplicate IDs',()=>{const row=['id','2024-01-01','bottle',30,'','formula','','created'];assert.equal(editRowIndex([HEADER,['other'],row],row),3);assert.throws(()=>editRowIndex([HEADER,[...row.slice(0,3),60,...row.slice(4)]],row),/changed/);assert.throws(()=>editRowIndex([HEADER,row,row],row),/duplicated/);assert.throws(()=>editRowIndex([HEADER],row),/removed/);});
 const sample={kind:'bottle',when:'2024-04-15T12:00',amount:'2',unit:'oz',minutes:'',detail:'breast milk',notes:''};
 test('converts US fluid ounces to mL for storage',()=>{const row=makeEntry(sample,'one');assert.equal(row[3],59.15);assert.equal(volume(row[3],'oz'),'2 oz');});
 test('nursing requires duration and no volume',()=>{assert.throws(()=>makeEntry({...sample,kind:'nursing',detail:'left'}));const row=makeEntry({...sample,kind:'nursing',detail:'left',minutes:'15'},'n');assert.equal(row[3],'');assert.equal(row[4],15);});
