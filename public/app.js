@@ -25,6 +25,7 @@ async function api(url,options={}){
   if(current!==epoch)throw Error('Session changed. Connect again.');
   if(response.status===401){clearSession();throw Error('Your Google session expired. Connect again.');}
   if(response.status===403){rows=[];ready=false;$('entries').replaceChildren();throw Error('Google denied access. Use an account with Editor access, enable the required APIs, and choose the shared sheet again.');}
+  if(response.status===404){const stage=url.includes('/drive/v3/files/')?'checking file access in Google Drive':url.includes('/values/')?'reading or writing the BabyLog tab':'opening the spreadsheet in Google Sheets';throw Error('Google could not find or grant access to this file while '+stage+' (404). Choose the sheet again using an account that can edit it.');}
   if(!response.ok)throw Error(response.status===429?'Google is busy. Wait a moment, then refresh.':`Google request failed (${response.status}). Refresh before retrying.`);
   return response.json();
 }
@@ -36,7 +37,8 @@ async function load(){
 }
 async function connectSheet(id){
   const base=sheetBase(id);
-  const access=await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=capabilities(canEdit)`);
+  const access=await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=capabilities(canEdit),mimeType`);
+  if(access.mimeType!=='application/vnd.google-apps.spreadsheet')throw Error('Choose a native Google Sheet. For an Excel file, open it in Google Sheets and use File > Save as Google Sheets, then choose the converted file.');
   if(!access.capabilities?.canEdit)throw Error('This Google account needs Editor access to the shared sheet.');
   const meta=await api(`${base}?fields=sheets.properties.title`);
   if(!meta.sheets.some(s=>s.properties.title===TAB)){
