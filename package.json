@@ -1,1 +1,1 @@
-{"name":"little-log","private":true,"version":"1.0.0","type":"module","scripts":{"test":"node --test tests/*.test.mjs","start":"node tools/serve.mjs"}}
+{"name":"milky-way","private":true,"version":"1.0.0","type":"module","scripts":{"test":"node --test tests/*.test.mjs","start":"node tools/serve.mjs"}}

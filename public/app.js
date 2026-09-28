@@ -109,7 +109,7 @@ function openSettings(){for(const id of ['clientId','projectNumber','apiKey'])$(
 $('settingsButton').onclick=openSettings;$('closeSettings').onclick=()=>$('settings').close();
 $('settingsForm').onsubmit=event=>{event.preventDefault();const clientId=$('clientId').value.trim();if(!/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)){say('Enter a valid Google OAuth web client ID.',true);return;}clearSession();config={clientId,projectNumber:$('projectNumber').value.trim(),apiKey:$('apiKey').value.trim(),unit:$('unit').value};try{persist();$('settings').close();say('Settings saved on this phone. Connect with Google to continue.');}catch{say('Browser storage is unavailable. Allow site storage to remember setup.',true);}};
 $('forget').onclick=()=>{clearSession();config={};localStorage.removeItem(KEY);$('settingsForm').reset();$('settings').close();say('Settings removed from this phone. Your Google Sheet has not changed.');};
-$('signOut').onclick=()=>{clearSession();say('Signed out of Little Log. Your shared sheet is unchanged.');};
+$('signOut').onclick=()=>{clearSession();say('Signed out of Milky Way. Your shared sheet is unchanged.');};
 window.addEventListener('offline',()=>{paint();say('You are offline. Connect to the internet to refresh or save entries.',true);});
 window.addEventListener('online',()=>{paint();if(ready)run(load);else say('Back online. Connect with Google to continue.');});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&navigator.onLine)run(load);});

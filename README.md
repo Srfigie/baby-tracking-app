@@ -1,4 +1,4 @@
-# Little Log
+# Milky Way
 
 A small, installable phone app for two parents to log bottle feeds, breastfeeding, and pumping sessions in one private Google Sheet. Plain HTML, CSS, and JavaScript; no package dependencies or paid server. Includes a GitHub Pages deployment workflow.
 
@@ -25,7 +25,7 @@ For stronger origin isolation, use a dedicated GitHub account/site origin or a c
 
 ## 1. Publish to GitHub Pages
 
-1. Create an empty **public** repository on GitHub. Free Pages supports public repositories. Use a generic name such as `little-log` with no baby information in the repository name, description, commits, or issues.
+1. Create an empty **public** repository on GitHub. Free Pages supports public repositories. Use a generic name such as `milky-way` with no baby information in the repository name, description, commits, or issues.
 2. Put the contents of this folder at the repository root, including `.github/workflows/pages.yml`. Only `public/` is deployed. Do not upload the outer `outputs` or `work` folders.
 3. In repository **Settings → Pages**, set **Source → GitHub Actions**.
 4. Push to `main`, or run **Deploy GitHub Pages** manually from the Actions tab after enabling Pages. Wait for the deployment to succeed.
@@ -47,7 +47,7 @@ Use your GitHub sign-in/credential manager when prompted. No Google values belon
 
 Use [Google Cloud Console](https://console.cloud.google.com/) while signed into your own account. Both parents use the same project configuration.
 
-1. Create a project with a generic name, such as `Little Log`.
+1. Create a project with a generic name, such as `Milky Way`.
 2. Enable **Google Sheets API**, **Google Drive API**, and **Google Picker API** in the API Library. Drive is used to verify Editor access; Picker selects the sheet. Normal family usage is small; this app does not require a paid backend or a service account.
 3. Under **Google Auth Platform**, configure Branding, Audience, and Data Access. Choose an **External** audience for personal Gmail accounts. Keep it in **Testing**, add only your two Google accounts as test users, and add this scope:
 
@@ -67,7 +67,7 @@ Keep these three values privately, such as in your password manager. Enter them 
 
 1. Create a blank Google Sheet using either parent’s Google account.
 2. Share it with the other parent’s exact Google account as **Editor**. Keep General access **Restricted**. Do not enable Publish to web.
-3. On each phone, open Little Log, open Settings, and enter the same client ID, project number, and restricted Picker API key.
+3. On each phone, open Milky Way, open Settings, and enter the same client ID, project number, and restricted Picker API key.
 4. Tap **Connect with Google** and select the account with access to the sheet. Allow the requested permission.
 5. Tap **Choose shared sheet** and select that same sheet on both phones. Selection adds a `BabyLog` tab if it does not exist, and headers if the tab is empty. Existing unrelated tabs are left alone. A nonempty `BabyLog` tab with incompatible headers is rejected rather than overwritten.
 6. Make one test entry on one phone and refresh on the other. Verify it appears and that the total is correct. Delete that test row directly in Google Sheets afterward.
