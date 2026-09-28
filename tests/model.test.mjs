@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {HEADER,makeEntry,parseRows,totals,volume,localInput} from '../public/model.js';
+const sample={kind:'bottle',when:'2024-04-15T12:00',amount:'2',unit:'oz',minutes:'',detail:'breast milk',notes:''};
+test('converts US fluid ounces to mL for storage',()=>{const row=makeEntry(sample,'one');assert.equal(row[3],59.15);assert.equal(volume(row[3],'oz'),'2 oz');});
+test('nursing requires duration and no volume',()=>{assert.throws(()=>makeEntry({...sample,kind:'nursing',detail:'left'}));const row=makeEntry({...sample,kind:'nursing',detail:'left',minutes:'15'},'n');assert.equal(row[3],'');assert.equal(row[4],15);});
+test('rejects invalid input before any write',()=>{for(const change of [{amount:'0'},{amount:'-1'},{amount:'NaN'},{amount:'99999'},{when:'invalid'},{when:'2999-01-01T12:00'},{minutes:'1.5'},{kind:'other'},{detail:'unexpected'},{notes:'x'.repeat(501)},{unit:'liters'}])assert.throws(()=>makeEntry({...sample,...change}));});
+test('notes remain literal values rather than being interpreted',()=>{assert.equal(makeEntry({...sample,notes:'=IMPORTXML("example", "x")'})[6],'=IMPORTXML("example", "x")');});
+test('rejects unrelated sheet headers',()=>assert.throws(()=>parseRows([['unrelated'],['x']])));
+test('deduplicates entry IDs and sorts newest first',()=>{const a=makeEntry(sample,'a'),b=makeEntry({...sample,when:'2024-04-16T12:00'},'b');assert.deepEqual(parseRows([HEADER,a,b,a]).map(r=>r.id),['b','a']);});
+test('today totals use local calendar day and separate pumping from feeds',()=>{const date=new Date(2024,3,15,14);const rows=[{when:new Date(2024,3,15,0,1).toISOString(),kind:'bottle',amount:60},{when:new Date(2024,3,15,2).toISOString(),kind:'nursing',amount:0},{when:new Date(2024,3,15,3).toISOString(),kind:'pump',amount:100},{when:new Date(2024,3,14,23,59).toISOString(),kind:'bottle',amount:90}];assert.deepEqual(totals(rows,date),{feeds:2,bottle:60,pump:100});assert.equal(localInput(date),'2024-04-15T14:00');});

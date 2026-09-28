@@ -1,0 +1,7 @@
+.env*
+!.env.example
+config.local.*
+node_modules/
+*.log
+.DS_Store
+test-results/
