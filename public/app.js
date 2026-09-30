@@ -1,5 +1,6 @@
 import {HEADER,TIMER_HEADER,TAB,localInput,makeEntry,parseRows,totals,volume,elapsedLabel,timerSeconds,editRowIndex,ML_PER_OZ} from './model.js';
 const $=id=>document.getElementById(id), SCOPE='https://www.googleapis.com/auth/drive.file', KEY='little-log.settings.v1';
+const SESSION_KEY='little-log.session.v1';
 let config={},token='',expires=0,epoch=0,timer,rows=[],kind='bottle',busy=false,ready=false,pending=null;
 let activity='feed',editing=null;
 const nursing={left:{elapsed:0,started:null},right:{elapsed:0,started:null}};
@@ -10,6 +11,19 @@ $('when').value=localInput();
 $('dateLabel').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date()).toUpperCase();
 function say(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
 function persist(){localStorage.setItem(KEY,JSON.stringify(config));}
+function forgetSession(){try{sessionStorage.removeItem(SESSION_KEY);}catch{}}
+function armSession(){
+  clearTimeout(timer);
+  timer=setTimeout(()=>{clearSession();say('Your Google session expired. Connect again to continue.');},Math.max(0,expires-Date.now()));
+}
+function restoreSession(){
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');
+    if(!saved||saved.clientId!==config.clientId||typeof saved.token!=='string'||!saved.token||!Number.isFinite(saved.expires)||saved.expires<=Date.now()){forgetSession();return;}
+    token=saved.token;expires=saved.expires;armSession();
+    if(config.sheetId)run(()=>connectSheet(config.sheetId));else paint();
+  }catch{forgetSession();}
+}
 function paint(){
   $('tracker').hidden=!ready&&!nursingStarted;$('welcome').hidden=ready;$('signOut').hidden=!token;
   $('signIn').hidden=!!token;$('chooseSheet').hidden=!token;
@@ -19,7 +33,7 @@ function paint(){
   for(const button of document.querySelectorAll('.editButton'))button.disabled=busy||!!pending;
   for(const id of ['signIn','chooseSheet','settingsButton','signOut'])$(id).disabled=busy;
 }
-function clearSession(){epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind('bottle');}updateSince();paint();}
+function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind('bottle');}updateSince();paint();}
 function requireSession(){if(!token||Date.now()>=expires){clearSession();throw Error('Your Google session expired. Connect again to continue.');}}
 async function run(fn){if(busy)return;busy=true;paint();try{await fn();}catch(error){say(error.message||'Something went wrong. Please try again.',true);}finally{busy=false;paint();}}
 async function api(url,options={}){
@@ -115,7 +129,8 @@ $('signIn').onclick=()=>{
     if(response.error||!response.access_token){say('Google access was not granted. Please try again.',true);return;}
     if(!google.accounts.oauth2.hasGrantedAllScopes(response,SCOPE)){say('Allow access to the sheet you select to use the log.',true);return;}
     token=response.access_token;expires=Date.now()+Math.max(0,Number(response.expires_in)*1000-60000);clearTimeout(timer);
-    timer=setTimeout(()=>{clearSession();say('Your Google session expired. Connect again to continue.');},Math.max(0,expires-Date.now()));
+    armSession();
+    try{sessionStorage.setItem(SESSION_KEY,JSON.stringify({token,expires,clientId:config.clientId}));}catch{say('Connected, but browser storage is unavailable; refreshing will require reconnecting.',true);}
     paint();if(config.sheetId)run(()=>connectSheet(config.sheetId));else say('Connected. Choose your shared Google Sheet; a BabyLog tab will be added if needed.');
   },error_callback:()=>say('Sign-in was closed or blocked. Allow the Google pop-up and try again.',true)});
   client.requestAccessToken({prompt:'select_account'});
@@ -135,7 +150,7 @@ $('settingsForm').onsubmit=event=>{event.preventDefault();const clientId=$('clie
 $('forget').onclick=()=>{clearSession();config={};localStorage.removeItem(KEY);$('settingsForm').reset();$('settings').close();say('Settings removed from this phone. Your Google Sheet has not changed.');};
 $('signOut').onclick=()=>{if((nursingStarted||editing||pending)&&!confirm('Sign out and discard this unsaved session?'))return;resetEntry();pending=null;clearSession();say('Signed out of Milky Way. Your shared sheet is unchanged.');};
 window.addEventListener('offline',()=>{paint();say('You are offline. Connect to the internet to refresh or save entries.',true);});
-window.addEventListener('online',()=>{paint();if(ready)run(load);else say('Back online. Connect with Google to continue.');});
+window.addEventListener('online',()=>{paint();if(ready)run(load);else if(token&&config.sheetId)run(()=>connectSheet(config.sheetId));else say('Back online. Connect with Google to continue.');});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&navigator.onLine)run(load);});
 setInterval(()=>{if(ready&&navigator.onLine&&document.visibilityState==='visible')run(load);},30000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>say('Offline installation is unavailable in this browser. You can still use the app online.'));
@@ -160,3 +175,4 @@ function applyTheme(){const dark=theme?theme==='dark':media.matches;document.doc
 $('themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('milky-way.theme',theme);}catch{}applyTheme();};media.addEventListener('change',applyTheme);applyTheme();
 setInterval(()=>{updateSince();updateNursing();},1000);
 window.addEventListener('beforeunload',event=>{if(nursingStarted||editing||pending){event.preventDefault();event.returnValue='';}});
+restoreSession();

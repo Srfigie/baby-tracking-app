@@ -86,6 +86,8 @@ Select Bottle, Breastfeed, or Pump, enter the time and amount/duration, then Sav
 
 Sign out clears the app session and forms. It does not sign out your entire Google account or revoke consent. “Forget this phone’s settings” removes local setup; it does not delete the sheet. Revoke consent from your Google Account permissions if desired.
 
+Refreshing the current tab restores its unexpired Google session and reconnects the remembered sheet automatically. The access token is stored in sessionStorage for that tab, never in localStorage. Google still requires reconnecting after token expiration; the selected sheet remains remembered. Closing the tab normally ends the session, although browser session restoration may retain it. Sign out and Forget settings remove the saved token.
+
 Saves append rows so both parents do not overwrite each other’s entries. Each entry has a random ID. If a save response is lost, the app does **not** automatically repeat the append: tapping Save again checks for the same ID first. If it still cannot confirm, inspect the sheet before reloading and entering it again. Do not close/reload during an unconfirmed save; there is intentionally no persistent recovery queue. Sheets is not a transactional database and provides no unique-ID constraint, so exactly-once delivery across crashes is not promised.
 
 The app shows the latest 100 valid entries but reads the tab for totals; all data remains in the sheet. For a family-scale log this is simple; a large multi-year log may load more slowly. Keep the header columns intact:
