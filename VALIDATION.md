@@ -1,5 +1,9 @@
 # Validation
 
+October 4, 2026 Apps Script update: 14 Node tests pass, including backend key rejection, invalid input rejection, duplicate append protection, edit conflicts, lock release, and safe header migration. App JavaScript syntax check passes. These backend tests use mocked Apps Script services. Live deployment, cross-origin browser responses, and actual phone PWA behavior still require the owner's deployed script.
+
+Headless Edge integration checks also pass for both connection modes, including Apps Script setup, POST body key transport, saving, reconnecting with cleared sessionStorage, editing, wrong-key rejection, forgetting settings, and the updated offline shell. Browser backend responses were mocked, so this does not verify Google's live redirect/CORS behavior.
+
 Verified locally on September 28, 2026:
 
 - Seven Node tests pass: unit conversion, nursing requirements, invalid inputs, literal notes, incompatible headers, duplicate-ID handling, and local-day totals.

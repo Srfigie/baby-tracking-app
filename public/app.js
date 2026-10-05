@@ -6,17 +6,33 @@ let activity='feed',editing=null;
 const nursing={left:{elapsed:0,started:null},right:{elapsed:0,started:null}};
 let nursingStarted=false;
 try{config=JSON.parse(localStorage.getItem(KEY)||'{}');if(!config||typeof config!=='object'||Array.isArray(config))config={};}catch{config={};}
+if(!config.mode&&config.clientId)config.mode='google';
 $('unit').value=config.unit==='oz'?'oz':'ml';
 $('when').value=localInput();
 $('dateLabel').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date()).toUpperCase();
 function say(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
 function persist(){localStorage.setItem(KEY,JSON.stringify(config));}
+const scriptMode=()=>config.mode==='script';
+async function scriptApi(action,data={}){
+  if(!config.scriptUrl||!config.accessKey)throw Error('Enter the Apps Script URL and access key in Settings.');
+  const current=epoch;
+  let result;
+  try{
+    const response=await fetch(config.scriptUrl,{method:'POST',credentials:'omit',redirect:'follow',cache:'no-store',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,key:config.accessKey,...data}),signal:AbortSignal.timeout(30000)});
+    if(!response.ok)throw Error();
+    result=await response.json();
+  }catch{throw Error('Could not reach Apps Script. Check internet and the /exec deployment URL; deploy with access set to Anyone. Refresh before retrying a save.');}
+  if(current!==epoch)throw Error('Settings changed. Connect again.');
+  if(!result.ok){if(result.code==='unauthorized'){rows=[];ready=false;$('entries').replaceChildren();}throw Error(result.error||'Apps Script request failed.');}
+  return result;
+}
 function forgetSession(){try{sessionStorage.removeItem(SESSION_KEY);}catch{}}
 function armSession(){
   clearTimeout(timer);
   timer=setTimeout(()=>{clearSession();say('Your Google session expired. Connect again to continue.');},Math.max(0,expires-Date.now()));
 }
 function restoreSession(){
+  if(scriptMode()){run(load);return;}
   try{
     const saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');
     if(!saved||saved.clientId!==config.clientId||typeof saved.token!=='string'||!saved.token||!Number.isFinite(saved.expires)||saved.expires<=Date.now()){forgetSession();return;}
@@ -26,7 +42,8 @@ function restoreSession(){
 }
 function paint(){
   $('tracker').hidden=!ready&&!nursingStarted;$('welcome').hidden=ready;$('signOut').hidden=!token;
-  $('signIn').hidden=!!token;$('chooseSheet').hidden=!token;
+  $('signIn').hidden=scriptMode()?ready:!!token;$('chooseSheet').hidden=scriptMode()||!token;
+  $('signIn').textContent=scriptMode()?'Connect to shared log':'Connect with Google';
   $('connection').textContent=!navigator.onLine?'Offline':ready?'Shared sheet connected':token?'Choose your sheet':'Not connected';
   $('entryFields').disabled=busy; $('save').disabled=!ready||!navigator.onLine; $('cancelEdit').disabled=busy;
   $('refresh').disabled=busy||!ready||!navigator.onLine;
@@ -34,7 +51,7 @@ function paint(){
   for(const id of ['signIn','chooseSheet','settingsButton','signOut'])$(id).disabled=busy;
 }
 function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind('bottle');}updateSince();paint();}
-function requireSession(){if(!token||Date.now()>=expires){clearSession();throw Error('Your Google session expired. Connect again to continue.');}}
+function requireSession(){if(scriptMode()){if(!config.accessKey)throw Error('Enter your access key in Settings.');return;}if(!token||Date.now()>=expires){clearSession();throw Error('Your Google session expired. Connect again to continue.');}}
 async function run(fn){if(busy)return;busy=true;paint();try{await fn();}catch(error){say(error.message||'Something went wrong. Please try again.',true);}finally{busy=false;paint();}}
 async function api(url,options={}){
   requireSession();const current=epoch;
@@ -50,7 +67,8 @@ async function api(url,options={}){
 function sheetBase(id=config.sheetId){if(!/^[a-zA-Z0-9_-]+$/.test(id||''))throw Error('Choose a Google Sheet first.');return `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}`;}
 const range=encodeURIComponent(`'${TAB}'!A:J`);
 async function load(){
-  const result=await api(`${sheetBase()}/values/${range}`);
+  const result=scriptMode()?await scriptApi('read'):await api(`${sheetBase()}/values/${range}`);
+  if(scriptMode())config.sheetId=result.sheetId;
   rows=parseRows(result.values);ready=true;render();say('Your shared log is up to date.');
 }
 async function connectSheet(id){
@@ -106,6 +124,10 @@ $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
   row.push(kind==='nursing'&&nursingStarted?timerSeconds(nursing.left):'',kind==='nursing'&&nursingStarted?timerSeconds(nursing.right):'');
   if(editing){
     row[7]=editing.raw[7];
+    if(scriptMode()){
+      await scriptApi('edit',{row,original:editing.raw});
+      resetEntry();await load();say('Changes saved to your shared sheet.');return;
+    }
     const latest=await api(`${sheetBase()}/values/${range}`);parseRows(latest.values);
     const rowNumber=editRowIndex(latest.values,editing.raw);
     try{await api(`${sheetBase()}/values/${encodeURIComponent(`'${TAB}'!A${rowNumber}:J${rowNumber}`)}?valueInputOption=RAW`,{method:'PUT',body:JSON.stringify({values:[row]})});}
@@ -113,7 +135,7 @@ $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
     resetEntry();await load();say('Changes saved to your shared sheet.');return;
   }
   pending=row;
-  try{await api(`${sheetBase()}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:'POST',body:JSON.stringify({values:[row]})});}
+  try{if(scriptMode())await scriptApi('append',{row});else await api(`${sheetBase()}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:'POST',body:JSON.stringify({values:[row]})});}
   catch(error){throw Error(`${error.message} Save not confirmed; press Save again to check, without sending a duplicate.`);}
   pending=null;resetEntry();
   try{await load();say('Saved to your shared sheet.');}catch{say('Your entry was saved, but activity could not refresh. Do not enter it again; tap Refresh.',true);}
@@ -121,6 +143,7 @@ $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
 function resetEntry(){editing=null;$('cancelEdit').hidden=true;$('formTitle').textContent='What are we logging?';resetNursing();setKind(kind);$('amount').value='';$('minutes').value='';$('notes').value='';$('when').value=localInput();}
 $('refresh').onclick=()=>run(load);
 $('signIn').onclick=()=>{
+  if(scriptMode()){run(load);return;}
   if(!config.clientId||!config.apiKey||!config.projectNumber){openSettings();return;}
   if(!globalThis.google?.accounts?.oauth2){say('Google sign-in is still loading. Check your internet connection and try again.',true);return;}
   const attempt=epoch;
@@ -144,13 +167,30 @@ $('chooseSheet').onclick=()=>run(async()=>{
     if(data.action===google.picker.Action.PICKED)run(()=>connectSheet(data.docs[0].id));
   }).build().setVisible(true);
 });
-function openSettings(){if(nursingStarted||editing||pending){say('Save or cancel the current entry before changing settings.',true);return;}for(const id of ['clientId','projectNumber','apiKey'])$(id).value=config[id]||'';$('settings').showModal();}
+function openSettings(){if(nursingStarted||editing||pending){say('Save or cancel the current entry before changing settings.',true);return;}for(const id of ['clientId','projectNumber','apiKey','scriptUrl','accessKey'])$(id).value=config[id]||'';$('connectionMode').value=config.mode||'script';updateSettingsMode();$('settings').showModal();}
 $('settingsButton').onclick=openSettings;$('closeSettings').onclick=()=>$('settings').close();
-$('settingsForm').onsubmit=event=>{event.preventDefault();const clientId=$('clientId').value.trim();if(!/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)){say('Enter a valid Google OAuth web client ID.',true);return;}clearSession();config={clientId,projectNumber:$('projectNumber').value.trim(),apiKey:$('apiKey').value.trim(),unit:$('unit').value};try{persist();$('settings').close();say('Settings saved on this phone. Connect with Google to continue.');}catch{say('Browser storage is unavailable. Allow site storage to remember setup.',true);}};
+function updateSettingsMode(){const script=$('connectionMode').value==='script';$('scriptSettings').hidden=!script;$('googleSettings').hidden=script;for(const id of ['scriptUrl','accessKey'])$(id).required=script;for(const id of ['clientId','projectNumber','apiKey'])$(id).required=!script;}
+$('connectionMode').onchange=updateSettingsMode;
+$('settingsForm').onsubmit=event=>{
+  event.preventDefault();const mode=$('connectionMode').value;
+  let next={mode,unit:$('unit').value};
+  if(mode==='script'){
+    const scriptUrl=$('scriptUrl').value.trim(),accessKey=$('accessKey').value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(scriptUrl)){say('Enter the deployed Apps Script URL ending in /exec.',true);return;}
+    if(!/^[a-f0-9]{64}$/i.test(accessKey)){say('Enter the 64-character access key generated during script setup.',true);return;}
+    next={...next,scriptUrl,accessKey};
+  }else{
+    const clientId=$('clientId').value.trim();
+    if(!/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)){say('Enter a valid Google OAuth web client ID.',true);return;}
+    next={...next,clientId,projectNumber:$('projectNumber').value.trim(),apiKey:$('apiKey').value.trim(),...(config.clientId===clientId&&config.sheetId?{sheetId:config.sheetId}:{})};
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(next));}catch{say('Browser storage is unavailable. Allow site storage to remember setup.',true);return;}
+  clearSession();config=next;$('settings').close();if(scriptMode())run(load);else say('Settings saved on this phone. Connect with Google to continue.');
+};
 $('forget').onclick=()=>{clearSession();config={};localStorage.removeItem(KEY);$('settingsForm').reset();$('settings').close();say('Settings removed from this phone. Your Google Sheet has not changed.');};
 $('signOut').onclick=()=>{if((nursingStarted||editing||pending)&&!confirm('Sign out and discard this unsaved session?'))return;resetEntry();pending=null;clearSession();say('Signed out of Milky Way. Your shared sheet is unchanged.');};
 window.addEventListener('offline',()=>{paint();say('You are offline. Connect to the internet to refresh or save entries.',true);});
-window.addEventListener('online',()=>{paint();if(ready)run(load);else if(token&&config.sheetId)run(()=>connectSheet(config.sheetId));else say('Back online. Connect with Google to continue.');});
+window.addEventListener('online',()=>{paint();if(ready||scriptMode())run(load);else if(token&&config.sheetId)run(()=>connectSheet(config.sheetId));else say('Back online. Connect with Google to continue.');});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&navigator.onLine)run(load);});
 setInterval(()=>{if(ready&&navigator.onLine&&document.visibilityState==='visible')run(load);},30000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>say('Offline installation is unavailable in this browser. You can still use the app online.'));

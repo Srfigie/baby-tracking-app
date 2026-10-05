@@ -1,5 +1,11 @@
 # Milky Way
 
+## Recommended: connect once using Apps Script
+
+For automatic connection on every launch without Google sign-in, follow [Apps Script setup](apps-script/SETUP.md). GitHub Pages still hosts the PWA for free; Apps Script handles authorized access to the private sheet. Each phone saves the deployed endpoint and a shared access key in Settings. Anyone with the key can access the log, so keep it private and out of this repository.
+
+The Google OAuth instructions below describe the alternative **Google sign-in** connection mode. Apps Script mode does not need the OAuth client, Google Picker key, or repeated sheet selection described below. Its access key is a persistent credential stored in localStorage; the token-storage statements below apply only to Google sign-in mode.
+
 A small, installable phone app for two parents to log bottle feeds, breastfeeding, and pumping sessions in one private Google Sheet. Plain HTML, CSS, and JavaScript; no package dependencies or paid server. Includes a GitHub Pages deployment workflow.
 
 ## What is ready

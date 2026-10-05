@@ -19,7 +19,7 @@ await page.route('https://sheets.googleapis.com/**',async r=>{
 });
 await page.goto(baseURL);
 await page.getByRole('button',{name:'Settings',exact:true}).click();
-await page.locator('#clientId').fill('TEST_ONLY.apps.googleusercontent.com');await page.locator('#projectNumber').fill('123456');await page.locator('#apiKey').fill('TEST_ONLY_KEY');await page.getByRole('button',{name:'Save settings',exact:true}).click();
+await page.locator('#connectionMode').selectOption('google');await page.locator('#clientId').fill('TEST_ONLY.apps.googleusercontent.com');await page.locator('#projectNumber').fill('123456');await page.locator('#apiKey').fill('TEST_ONLY_KEY');await page.getByRole('button',{name:'Save settings',exact:true}).click();
 await page.getByRole('button',{name:'Connect with Google'}).click();await page.getByRole('button',{name:'Choose shared sheet'}).click();await page.getByText(/checking file access in Google Drive \(404\)/).waitFor();assert.equal(await page.locator('#tracker').isVisible(),false);driveMissing=false;excelFile=true;await page.getByRole('button',{name:'Choose shared sheet'}).click();await page.getByText(/Choose a native Google Sheet/).waitFor();excelFile=false;await page.getByRole('button',{name:'Choose shared sheet'}).click();await page.locator('#tracker').waitFor({state:'visible'});
 await page.locator('#amount').fill('60');await page.locator('#notes').fill('<img src=x onerror=alert(1)>');await page.getByRole('button',{name:'Save bottle',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#feedCount').textContent==='1');
 assert.equal(await page.locator('#entries img').count(),0);assert.equal(writes,1);
@@ -56,6 +56,24 @@ deny=false;
 await page.getByRole('button',{name:'Connect with Google'}).click();await page.locator('#tracker').waitFor({state:'visible'});
 assert.deepEqual(errors,[]);console.log('PASS: mobile layout, Google mock flow, bottle/nursing/pump saves, literal notes, no token in localStorage, ambiguous append reconciliation, offline controls, denied access, sign-out.');
 await context.close();
-const shell=await browser.newContext();const p=await shell.newPage();await p.goto(baseURL);await p.evaluate(()=>navigator.serviceWorker.ready);await p.reload();await shell.setOffline(true);await p.reload();assert.equal(await p.title(),'Milky Way');const cacheUrls=await p.evaluate(async()=>{const cache=await caches.open('little-log-shell-v5');return (await cache.keys()).map(r=>r.url)});assert.equal(cacheUrls.length,10);assert.ok(cacheUrls.every(u=>u.startsWith(baseURL+'/')));console.log('PASS: offline shell and cache allowlist.');
+const scriptContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+const scriptPage=await scriptContext.newPage();const scriptErrors=[];scriptPage.on('pageerror',e=>scriptErrors.push(e.message));
+await scriptPage.route('https://accounts.google.com/**',r=>r.abort());await scriptPage.route('https://apis.google.com/**',r=>r.abort());
+let scriptValues=[['id','started_at','kind','amount_ml','duration_minutes','detail','notes','created_at','left_seconds','right_seconds']],scriptWrites=0;
+await scriptPage.route('https://script.google.com/macros/s/TEST_DEPLOYMENT/exec',async r=>{
+ const request=r.request().postDataJSON();assert.equal(r.request().method(),'POST');assert.match(r.request().headers()['content-type'],/^text\/plain/);assert.ok(!r.request().url().includes('key='));
+ if(request.key!=='a'.repeat(64))return r.fulfill({json:{ok:false,code:'unauthorized',error:'Access key rejected.'}});
+ if(request.action==='read')return r.fulfill({json:{ok:true,sheetId:'TEST_SHEET',values:scriptValues}});
+ if(request.action==='append'){scriptWrites++;scriptValues.push(request.row);}
+ if(request.action==='edit'){const i=scriptValues.findIndex(row=>row[0]===request.row[0]);assert.deepEqual(scriptValues[i],request.original);scriptValues[i]=request.row;}
+ return r.fulfill({json:{ok:true}});
+});
+await scriptPage.goto(baseURL);await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#scriptUrl').fill('https://script.google.com/macros/s/TEST_DEPLOYMENT/exec');await scriptPage.locator('#accessKey').fill('a'.repeat(64));await scriptPage.getByRole('button',{name:'Save settings',exact:true}).click();await scriptPage.locator('#tracker').waitFor({state:'visible'});
+await scriptPage.locator('#amount').fill('60');await scriptPage.locator('#save').click();await scriptPage.getByText('Saved to your shared sheet.',{exact:true}).waitFor();assert.equal(scriptWrites,1);
+await scriptPage.evaluate(()=>sessionStorage.clear());await scriptPage.reload();await scriptPage.locator('#tracker').waitFor({state:'visible'});assert.equal(await scriptPage.locator('#feedCount').textContent(),'1');assert.equal(await scriptPage.locator('#chooseSheet').isVisible(),false);
+await scriptPage.locator('.editButton').first().click();await scriptPage.locator('#notes').fill('Script edit');await scriptPage.locator('#save').click();await scriptPage.getByText('Changes saved to your shared sheet.',{exact:true}).waitFor();assert.equal(scriptValues[1][6],'Script edit');
+await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#accessKey').fill('b'.repeat(64));await scriptPage.getByRole('button',{name:'Save settings',exact:true}).click();await scriptPage.getByText('Access key rejected.',{exact:true}).waitFor();assert.equal(await scriptPage.locator('#tracker').isVisible(),false);
+await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#forget').click();assert.equal(await scriptPage.evaluate(()=>localStorage.getItem('little-log.settings.v1')),null);assert.deepEqual(scriptErrors,[]);await scriptContext.close();console.log('PASS: Apps Script setup, POST key transport, save, fresh-session reconnect, edit, wrong-key rejection, forget settings.');
+const shell=await browser.newContext();const p=await shell.newPage();await p.goto(baseURL);await p.evaluate(()=>navigator.serviceWorker.ready);await p.reload();await shell.setOffline(true);await p.reload();assert.equal(await p.title(),'Milky Way');const cacheUrls=await p.evaluate(async()=>{const cache=await caches.open('little-log-shell-v6');return (await cache.keys()).map(r=>r.url)});assert.equal(cacheUrls.length,10);assert.ok(cacheUrls.every(u=>u.startsWith(baseURL+'/')));console.log('PASS: offline shell and cache allowlist.');
 await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});
