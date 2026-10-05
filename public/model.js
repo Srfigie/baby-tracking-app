@@ -1,7 +1,7 @@
 export const HEADER=['id','started_at','kind','amount_ml','duration_minutes','detail','notes','created_at'];
 export const TAB='BabyLog';
 export const TIMER_HEADER=['left_seconds','right_seconds'];
-export function elapsedLabel(when,now=Date.now()){if(!when)return 'No entries yet';const minutes=Math.max(0,Math.floor((now-Date.parse(when))/60000));return `${Math.floor(minutes/60)}h ${minutes%60}m ago`;}
+export function elapsedLabel(when,now=Date.now()){if(!when)return 'No entries yet';const elapsed=now-Date.parse(when);const minutes=elapsed<0?0:Math.max(1,Math.floor(elapsed/60000));return `${Math.floor(minutes/60)}h ${minutes%60}m ago`;}
 export function timerSeconds(timer,now=Date.now()){return Math.max(0,Math.floor((timer.elapsed+(timer.started===null?0:now-timer.started))/1000));}
 export function editRowIndex(values,original){const matches=values.map((r,i)=>r[0]===original[0]?i:-1).filter(i=>i>0);if(matches.length!==1)throw Error('This entry was removed or its ID is duplicated. Refresh before editing.');const index=matches[0];if(Array.from({length:10},(_,i)=>String(values[index][i]??'')).join('\u0000')!==Array.from({length:10},(_,i)=>String(original[i]??'')).join('\u0000'))throw Error('This entry changed on another device. Cancel editing and refresh to see the latest version.');return index+1;}
 export const ML_PER_OZ=29.5735295625;
