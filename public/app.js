@@ -41,7 +41,10 @@ function restoreSession(){
   }catch{forgetSession();}
 }
 function paint(){
-  $('tracker').hidden=!ready&&!nursingStarted;$('welcome').hidden=ready;$('signOut').hidden=!token;
+  const connecting=busy&&!ready;
+  $('connecting').hidden=!connecting;
+  $('tracker').hidden=!ready&&!nursingStarted;$('welcome').hidden=ready||connecting;$('signOut').hidden=!token;
+  $('status').hidden=connecting;
   $('signIn').hidden=scriptMode()?ready:!!token;$('chooseSheet').hidden=scriptMode()||!token;
   $('signIn').textContent=scriptMode()?'Connect to shared log':'Connect with Google';
   $('connection').textContent=!navigator.onLine?'Offline':ready?'Shared sheet connected':token?'Choose your sheet':'Not connected';

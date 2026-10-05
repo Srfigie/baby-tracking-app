@@ -3,6 +3,7 @@
 <body><header><a class="brand" href="./"><img src="./icon.svg" width="40" height="40" alt="">Milky Way</a><button id="themeToggle" class="quiet" aria-label="Switch to dark theme">Dark theme</button><button id="settingsButton" class="quiet">Settings</button></header><main>
 <div class="heading"><div><p class="eyebrow" id="dateLabel">FEEDING & PUMPING</p><h1>Feeding &amp; pumping</h1></div></div>
 <p id="status" role="status" aria-live="polite">Open Settings to connect your shared log.</p>
+<div id="connecting" class="card connecting" role="status" hidden><span class="spinner" aria-hidden="true"></span><span>Connecting to your shared spreadsheet…</span></div>
 <section class="card" id="welcome"><h2>Your shared baby log</h2><p>Log breastfeeds, bottles, and pumping sessions. Both phones stay connected to the same private Google Sheet.</p><button id="signIn">Connect with Google</button><button id="chooseSheet" class="secondary" hidden>Choose shared sheet</button><p class="muted">Keep your sheet restricted and your access key private. <a href="./privacy.html">Privacy</a></p></section>
 <div id="tracker" hidden>
 <section class="totals" aria-label="Today's totals"><div><span>Feedings today</span><strong id="feedCount">0</strong></div><div><span>Bottle today</span><strong id="bottleTotal">0 mL</strong></div><div><span>Pumped today</span><strong id="pumpTotal">0 mL</strong></div></section>

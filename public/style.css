@@ -15,3 +15,7 @@ header{gap:10px;flex-wrap:wrap}.brand{margin-right:auto}.since{margin-bottom:24p
 [data-theme=dark] .totals>div:last-child,[data-theme=dark] .entry.pump .symbol{background:#4a3540}
 [data-theme=dark] .entry,[data-theme=dark] .badge,[data-theme=dark] .timerCard{border-color:#43516c}
 @media(max-width:420px){header .brand{width:100%}header .quiet{flex:1}.since{gap:8px}.since .card{padding:15px 12px}.since strong{font-size:1.3rem}}
+.connecting{display:flex;align-items:center;justify-content:center;gap:14px;min-height:160px}
+.spinner{width:28px;height:28px;flex-shrink:0;border:3px solid currentColor;border-right-color:transparent;border-radius:50%;animation:connection-spin .8s linear infinite}
+@keyframes connection-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
