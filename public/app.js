@@ -196,7 +196,33 @@ window.addEventListener('offline',()=>{paint();say('You are offline. Connect to 
 window.addEventListener('online',()=>{paint();if(ready||scriptMode())run(load);else if(token&&config.sheetId)run(()=>connectSheet(config.sheetId));else say('Back online. Connect with Google to continue.');});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&navigator.onLine)run(load);});
 setInterval(()=>{if(ready&&navigator.onLine&&document.visibilityState==='visible')run(load);},30000);
-if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>say('Offline installation is unavailable in this browser. You can still use the app online.'));
+let workerRegistration;
+if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{workerRegistration=reg;}).catch(()=>say('Offline installation is unavailable in this browser. You can still use the app online.'));
+$('checkUpdate').onclick=async()=>{
+  const message=$('updateStatus');
+  if(busy||nursingStarted||editing||pending||$('amount').value||$('minutes').value||$('notes').value){message.textContent='Save or cancel your current entry before updating.';return;}
+  if(!navigator.onLine){message.textContent='Connect to the internet to update.';return;}
+  $('checkUpdate').disabled=true;message.textContent='Checking for updates…';
+  try{
+    const reg=workerRegistration||await navigator.serviceWorker.getRegistration();
+    if(!reg)throw Error('Updates are unavailable. Reopen the app online.');
+    await reg.update();
+    if(reg.installing)await new Promise((resolve,reject)=>{
+      const worker=reg.installing;
+      const timeout=setTimeout(()=>{worker.removeEventListener('statechange',changed);reject(Error('Update download timed out. Try again.'));},20000);
+      function changed(){if(worker.state==='installed'||worker.state==='redundant'){clearTimeout(timeout);worker.removeEventListener('statechange',changed);worker.state==='installed'?resolve():reject(Error('Update download failed. Try again.'));}}
+      worker.addEventListener('statechange',changed);changed();
+    });
+    if(reg.waiting){
+      await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>{navigator.serviceWorker.removeEventListener('controllerchange',changed);reject(Error('Update activation timed out. Close and reopen the app.'));},10000);
+        function changed(){clearTimeout(timeout);navigator.serviceWorker.removeEventListener('controllerchange',changed);resolve();}
+        navigator.serviceWorker.addEventListener('controllerchange',changed);reg.waiting.postMessage({type:'ACTIVATE_UPDATE'});
+      });
+    }
+    const url=new URL(location.href);url.searchParams.set('update',Date.now());location.replace(url.href);
+  }catch(error){message.textContent=error.message||'Could not check for updates. Try again.';$('checkUpdate').disabled=false;}
+};
 if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'refresh_shared_log',description:'Refresh the visible feeding and pumping activity from the connected Google Sheet.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute:async input=>{if(!input||Object.keys(input).length)throw Error('No arguments expected.');if(busy||!ready)throw Error('Connect a sheet and wait for the current action first.');await run(load);return {connected:ready};}})).catch(()=>{});}catch{}}
 paint();
 
