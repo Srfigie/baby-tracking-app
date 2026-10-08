@@ -13,7 +13,7 @@ A small, installable phone app for two parents to log bottle feeds, breastfeedin
 - Bottle amount and milk type; breastfeed duration and side; pumping amount, duration, and side.
 - mL or US fluid ounces, optional notes, backdated entries, local-day totals, and recent activity.
 - Google authorization using `drive.file`, limited to files explicitly selected with Google Picker.
-- Automatic refresh every 30 seconds while visible, plus manual refresh.
+- Manual refresh to update the shared log; entries reload after saving.
 - Installable PWA with offline app shell. Reading after restart and all saves require internet. No background synchronization or offline record queue.
 - Records can be corrected or deleted directly in the sheet. Its revision history provides recovery.
 

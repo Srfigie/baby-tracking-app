@@ -1,7 +1,7 @@
 import {HEADER,TIMER_HEADER,TAB,localInput,makeEntry,parseRows,totals,volume,elapsedLabel,timerSeconds,editRowIndex,ML_PER_OZ} from './model.js';
 const $=id=>document.getElementById(id), SCOPE='https://www.googleapis.com/auth/drive.file', KEY='little-log.settings.v1';
 const SESSION_KEY='little-log.session.v1';
-let config={},token='',expires=0,epoch=0,timer,rows=[],kind='bottle',busy=false,ready=false,pending=null;
+let config={},token='',expires=0,epoch=0,timer,rows=[],kind=null,busy=false,ready=false,pending=null;
 let activity='feed',editing=null;
 const nursing={left:{elapsed:0,started:null},right:{elapsed:0,started:null}};
 let nursingStarted=false;
@@ -48,12 +48,12 @@ function paint(){
   $('signIn').hidden=scriptMode()?ready:!!token;$('chooseSheet').hidden=scriptMode()||!token;
   $('signIn').textContent=scriptMode()?'Connect to shared log':'Connect with Google';
   $('connection').textContent=!navigator.onLine?'Offline':ready?'Shared sheet connected':token?'Choose your sheet':'Not connected';
-  $('entryFields').disabled=busy; $('save').disabled=!ready||!navigator.onLine; $('cancelEdit').disabled=busy;
+  $('kindFields').disabled=busy; $('entryFields').disabled=busy; $('save').disabled=!ready||!navigator.onLine; $('cancelEdit').disabled=busy;
   $('refresh').disabled=busy||!ready||!navigator.onLine;
   for(const button of document.querySelectorAll('.editButton'))button.disabled=busy||!!pending;
   for(const id of ['signIn','chooseSheet','settingsButton','signOut'])$(id).disabled=busy;
 }
-function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind('bottle');}updateSince();paint();}
+function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind(null);}updateSince();paint();}
 function requireSession(){if(scriptMode()){if(!config.accessKey)throw Error('Enter your access key in Settings.');return;}if(!token||Date.now()>=expires){clearSession();throw Error('Your Google session expired. Connect again to continue.');}}
 async function run(fn){if(busy)return;busy=true;paint();try{await fn();}catch(error){say(error.message||'Something went wrong. Please try again.',true);}finally{busy=false;paint();}}
 async function api(url,options={}){
@@ -99,7 +99,7 @@ function render(){
   const sum=totals(rows),unit=$('unit').value;
   $('feedCount').textContent=sum.feeds;$('bottleTotal').textContent=volume(sum.bottle,unit);$('pumpTotal').textContent=volume(sum.pump,unit);
   $('sheetLink').href=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(config.sheetId)}/edit`;
-  $('synced').textContent=`Updated ${new Date().toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})} · refreshes every 30 seconds`;
+  $('synced').textContent=`Updated ${new Date().toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})} · tap Refresh to update`;
   updateSince();
   const visible=rows.filter(r=>activity==='pump'?r.kind==='pump':r.kind!=='pump');
   $('entries').replaceChildren();
@@ -115,7 +115,7 @@ function render(){
   }
   if(visible.length>100){const p=document.createElement('p');p.textContent='Showing the latest 100 entries. All entries are in your sheet.';$('entries').append(p);}paint();
 }
-function setKind(value){kind=value;for(const b of document.querySelectorAll('[data-kind]'))b.setAttribute('aria-pressed',String(b.dataset.kind===kind));$('amountFields').hidden=kind==='nursing';$('amount').required=kind!=='nursing';$('milkField').hidden=kind!=='bottle';$('sideField').hidden=kind==='bottle';$('nursingTimer').hidden=kind!=='nursing';$('minutes').required=kind==='nursing';$('minutes').placeholder=kind==='nursing'?'Minutes':'Optional';$('save').textContent=editing?'Save changes':{bottle:'Save bottle',nursing:'Save breastfeed',pump:'Save pumping session'}[kind];}
+function setKind(value){if(value&&!kind&&!editing)$('when').value=localInput();kind=value;$('entryForm').hidden=!kind;$('entryHint').hidden=!kind;for(const b of document.querySelectorAll('[data-kind]'))b.setAttribute('aria-pressed',String(b.dataset.kind===kind));$('amountFields').hidden=kind==='nursing';$('amount').required=kind!=='nursing';$('milkField').hidden=kind!=='bottle';$('sideField').hidden=kind==='bottle';$('nursingTimer').hidden=kind!=='nursing';$('minutes').required=kind==='nursing';$('minutes').placeholder=kind==='nursing'?'Minutes':'Optional';$('save').textContent=editing?'Save changes':{bottle:'Save bottle',nursing:'Save breastfeed',pump:'Save pumping session'}[kind]||'Save entry';}
 for(const b of document.querySelectorAll('[data-kind]'))b.onclick=()=>{if(nursingStarted&&b.dataset.kind!=='nursing'){say('Save the breastfeeding session or reset its timers before switching type.',true);return;}setKind(b.dataset.kind);};
 $('unit').onchange=()=>{config.unit=$('unit').value;try{persist();}catch{say('This browser could not remember your unit preference.',true);}if(ready)render();};
 $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
@@ -143,7 +143,7 @@ $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
   pending=null;resetEntry();
   try{await load();say('Saved to your shared sheet.');}catch{say('Your entry was saved, but activity could not refresh. Do not enter it again; tap Refresh.',true);}
 });};
-function resetEntry(){editing=null;$('cancelEdit').hidden=true;$('formTitle').textContent='What are we logging?';resetNursing();setKind(kind);$('amount').value='';$('minutes').value='';$('notes').value='';$('when').value=localInput();}
+function resetEntry(){editing=null;$('cancelEdit').hidden=true;$('formTitle').textContent='What are we logging?';resetNursing();setKind(null);$('amount').value='';$('minutes').value='';$('notes').value='';$('when').value=localInput();}
 $('refresh').onclick=()=>run(load);
 $('signIn').onclick=()=>{
   if(scriptMode()){run(load);return;}
@@ -193,9 +193,7 @@ $('settingsForm').onsubmit=event=>{
 $('forget').onclick=()=>{clearSession();config={};localStorage.removeItem(KEY);$('settingsForm').reset();$('settings').close();say('Settings removed from this phone. Your Google Sheet has not changed.');};
 $('signOut').onclick=()=>{if((nursingStarted||editing||pending)&&!confirm('Sign out and discard this unsaved session?'))return;resetEntry();pending=null;clearSession();say('Signed out of Milky Way. Your shared sheet is unchanged.');};
 window.addEventListener('offline',()=>{paint();say('You are offline. Connect to the internet to refresh or save entries.',true);});
-window.addEventListener('online',()=>{paint();if(ready||scriptMode())run(load);else if(token&&config.sheetId)run(()=>connectSheet(config.sheetId));else say('Back online. Connect with Google to continue.');});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&navigator.onLine)run(load);});
-setInterval(()=>{if(ready&&navigator.onLine&&document.visibilityState==='visible')run(load);},30000);
+window.addEventListener('online',()=>{paint();say(ready?'Back online. Tap Refresh to update your shared log.':'Back online. Connect to your shared log to continue.');});
 let workerRegistration;
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{workerRegistration=reg;}).catch(()=>say('Offline installation is unavailable in this browser. You can still use the app online.'));
 $('checkUpdate').onclick=async()=>{
