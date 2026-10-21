@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HEADER,makeEntry,parseRows,totals,volume,localInput} from '../public/model.js';
 import {elapsedLabel,timerSeconds,editRowIndex} from '../public/model.js';
+import {rollingAverages} from '../public/model.js';
+
+test('rolling daily averages use seven full days and exclude old and future entries',()=>{
+  const now=new Date('2026-10-21T12:00:00Z'),start=now.getTime()-7*86400000;
+  const entry=(when,kind,amount=0)=>({when:new Date(when).toISOString(),kind,amount});
+  const rows=[entry(start+1,'bottle',70),entry(now,'nursing'),entry(now,'pump',140),entry(start,'bottle',700),entry(start-1,'pump',700),entry(now.getTime()+1,'bottle',700)];
+  assert.deepEqual(rollingAverages(rows,now),{feeds:2/7,bottle:10,pump:20});
+  assert.deepEqual(rollingAverages([],now),{feeds:0,bottle:0,pump:0});
+  assert.equal(volume(rollingAverages([entry(now,'bottle',7*29.5735295625)],now).bottle,'oz'),'1 oz');
+});
 test('elapsed labels cross hours and handle empty or future entries',()=>{const now=Date.parse('2026-01-01T12:00Z');assert.equal(elapsedLabel('2026-01-01T09:55Z',now),'2h 5m ago');assert.equal(elapsedLabel(null,now),'No entries yet');assert.equal(elapsedLabel('2026-01-01T12:01Z',now),'0h 0m ago');});
 test('elapsed labels show at least one minute for sessions that have started',()=>{const now=Date.parse('2026-01-01T12:00Z');for(const seconds of [0,1,30,59,60,119])assert.equal(elapsedLabel(new Date(now-seconds*1000).toISOString(),now),'0h 1m ago');assert.equal(elapsedLabel(new Date(now-120000).toISOString(),now),'0h 2m ago');});
 test('timer uses elapsed wall time across suspension and pause',()=>{assert.equal(timerSeconds({elapsed:65000,started:1000},126000),190);assert.equal(timerSeconds({elapsed:65000,started:null},999999),65);});

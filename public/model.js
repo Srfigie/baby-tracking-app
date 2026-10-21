@@ -27,3 +27,16 @@ export function parseRows(values=[]){
 }
 export function totals(rows,now=new Date()){return rows.filter(r=>new Date(r.when).toDateString()===now.toDateString()).reduce((s,r)=>{if(r.kind!=='pump')s.feeds++;if(r.kind==='bottle')s.bottle+=r.amount;if(r.kind==='pump')s.pump+=r.amount;return s;},{feeds:0,bottle:0,pump:0});}
 export function volume(ml,unit){return `${new Intl.NumberFormat(undefined,{maximumFractionDigits:1}).format(unit==='oz'?ml/ML_PER_OZ:ml)} ${unit==='oz'?'oz':'mL'}`;}
+// Daily averages across the trailing 168 hours, including days with no entries.
+export function rollingAverages(rows,now=new Date()){
+  const end=now.getTime(),start=end-7*24*60*60*1000;
+  const sum=rows.reduce((s,r)=>{
+    const when=Date.parse(r.when);
+    if(when<=start||when>end)return s;
+    if(r.kind==='bottle'||r.kind==='nursing')s.feeds++;
+    if(r.kind==='bottle')s.bottle+=r.amount;
+    if(r.kind==='pump')s.pump+=r.amount;
+    return s;
+  },{feeds:0,bottle:0,pump:0});
+  return {feeds:sum.feeds/7,bottle:sum.bottle/7,pump:sum.pump/7};
+}

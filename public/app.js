@@ -1,4 +1,4 @@
-import {HEADER,TIMER_HEADER,TAB,localInput,makeEntry,parseRows,totals,volume,elapsedLabel,timerSeconds,editRowIndex,ML_PER_OZ} from './model.js';
+import {HEADER,TIMER_HEADER,TAB,localInput,makeEntry,parseRows,totals,rollingAverages,volume,elapsedLabel,timerSeconds,editRowIndex,ML_PER_OZ} from './model.js';
 const $=id=>document.getElementById(id), SCOPE='https://www.googleapis.com/auth/drive.file', KEY='little-log.settings.v1';
 const SESSION_KEY='little-log.session.v1';
 let config={},token='',expires=0,epoch=0,timer,rows=[],kind=null,busy=false,ready=false,pending=null;
@@ -53,7 +53,7 @@ function paint(){
   for(const button of document.querySelectorAll('.editButton'))button.disabled=busy||!!pending;
   for(const id of ['signIn','chooseSheet','settingsButton','signOut'])$(id).disabled=busy;
 }
-function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind(null);}updateSince();paint();}
+function clearSession(){forgetSession();epoch++;clearTimeout(timer);token='';expires=0;rows=[];ready=false;$('entries').replaceChildren();$('feedCount').textContent='0';$('bottleTotal').textContent='0 mL';$('pumpTotal').textContent='0 mL';renderAverages();$('synced').textContent='';$('sheetLink').removeAttribute('href');if(!nursingStarted&&!editing&&!pending){$('entryForm').reset();$('when').value=localInput();$('unit').value=config.unit==='oz'?'oz':'ml';setKind(null);}updateSince();paint();}
 function requireSession(){if(scriptMode()){if(!config.accessKey)throw Error('Enter your access key in Settings.');return;}if(!token||Date.now()>=expires){clearSession();throw Error('Your Google session expired. Connect again to continue.');}}
 async function run(fn){if(busy)return;busy=true;paint();try{await fn();}catch(error){say(error.message||'Something went wrong. Please try again.',true);}finally{busy=false;paint();}}
 async function api(url,options={}){
@@ -95,8 +95,16 @@ async function connectSheet(id){
   }
   config.sheetId=id;persist();await load();
 }
+function renderAverages(){
+  const average=rollingAverages(rows),unit=$('unit').value;
+  const feeds=new Intl.NumberFormat(undefined,{maximumFractionDigits:1}).format(average.feeds);
+  $('feedAverage').textContent='7-day avg: '+feeds+'/day';
+  $('bottleAverage').textContent='7-day avg: '+volume(average.bottle,unit)+'/day';
+  $('pumpAverage').textContent='7-day avg: '+volume(average.pump,unit)+'/day';
+}
 function render(){
   const sum=totals(rows),unit=$('unit').value;
+  renderAverages();
   $('feedCount').textContent=sum.feeds;$('bottleTotal').textContent=volume(sum.bottle,unit);$('pumpTotal').textContent=volume(sum.pump,unit);
   $('sheetLink').href=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(config.sheetId)}/edit`;
   $('synced').textContent=`Updated ${new Date().toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})} · tap Refresh to update`;
@@ -240,6 +248,6 @@ for(const [id,value] of [['feedTab','feed'],['pumpTab','pump']])$(id).onclick=()
 const media=matchMedia('(prefers-color-scheme: dark)');let theme;try{theme=localStorage.getItem('milky-way.theme');}catch{}
 function applyTheme(){const dark=theme?theme==='dark':media.matches;document.documentElement.dataset.theme=dark?'dark':'light';$('themeToggle').textContent=dark?'Light theme':'Dark theme';$('themeToggle').setAttribute('aria-label',dark?'Switch to light theme':'Switch to dark theme');document.querySelector('meta[name="theme-color"]').content=dark?'#11182b':'#192e57';}
 $('themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('milky-way.theme',theme);}catch{}applyTheme();};media.addEventListener('change',applyTheme);applyTheme();
-setInterval(()=>{updateSince();updateNursing();},1000);
+setInterval(()=>{updateSince();updateNursing();renderAverages();},1000);
 window.addEventListener('beforeunload',event=>{if(nursingStarted||editing||pending){event.preventDefault();event.returnValue='';}});
 restoreSession();

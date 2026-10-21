@@ -19,3 +19,5 @@ header{gap:10px;flex-wrap:wrap}.brand{margin-right:auto}.since{margin-bottom:24p
 .spinner{width:28px;height:28px;flex-shrink:0;border:3px solid currentColor;border-right-color:transparent;border-radius:50%;animation:connection-spin .8s linear infinite}
 @keyframes connection-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.spinner{animation:none}}
+
+.metricAverage{display:block;font-size:.75rem;line-height:1.5;margin-top:8px;overflow-wrap:anywhere}
