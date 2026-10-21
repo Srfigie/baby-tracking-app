@@ -98,9 +98,9 @@ async function connectSheet(id){
 function renderAverages(){
   const average=rollingAverages(rows),unit=$('unit').value;
   const feeds=new Intl.NumberFormat(undefined,{maximumFractionDigits:1}).format(average.feeds);
-  $('feedAverage').textContent='7-day avg: '+feeds+'/day';
-  $('bottleAverage').textContent='7-day avg: '+volume(average.bottle,unit)+'/day';
-  $('pumpAverage').textContent='7-day avg: '+volume(average.pump,unit)+'/day';
+  $('feedAverage').textContent=feeds+' feedings/day avg';
+  $('bottleAverage').textContent=volume(average.bottle,unit)+'/day avg';
+  $('pumpAverage').textContent=volume(average.pump,unit)+'/day avg';
 }
 function render(){
   const sum=totals(rows),unit=$('unit').value;
