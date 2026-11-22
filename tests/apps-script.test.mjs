@@ -33,3 +33,20 @@ test('header mismatch is rejected and old logs upgrade only empty timer columns'
   const old=backend([header.slice(0,8)]);assert.equal(old.call('read').ok,true);assert.deepEqual(old.values[0],header);
   const occupied=backend([[...header.slice(0,8),'occupied']]);assert.equal(occupied.call('read').ok,false);assert.equal(occupied.writes,0);
 });
+test('sleep uses the existing columns and rejects overlaps and conflicting wake-time edits under lock',()=>{
+  const b=backend();
+  assert.equal(b.call('read').supportsSleep,true);
+  const open=['night','2025-01-01T23:00:00Z','sleep','','','night','','2025-01-01T23:00:00Z','',''];
+  const closed=open.slice();closed[4]=420;
+  assert.equal(b.call('append',{row:open}).ok,true);
+  assert.equal(b.call('append',{row:open}).ok,true);
+  assert.match(b.call('append',{row:['another',...open.slice(1)]}).error,/overlap/);
+  assert.equal(b.call('edit',{original:open,row:closed}).ok,true);
+  assert.match(b.call('edit',{original:open,row:open}).error,/changed/);
+  for(const [i,value] of [[4,-1],[4,1.5],[4,9999999999],[3,10],[5,'left'],[8,50]]){
+    const bad=closed.slice();bad[i]=value;
+    assert.equal(b.call('edit',{original:closed,row:bad}).ok,false);
+  }
+  assert.equal(b.writes,2);
+  assert.equal(b.locks,0);
+});

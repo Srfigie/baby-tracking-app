@@ -6,11 +6,12 @@ For automatic connection on every launch without Google sign-in, follow [Apps Sc
 
 The Google OAuth instructions below describe the alternative **Google sign-in** connection mode. Apps Script mode does not need the OAuth client, Google Picker key, or repeated sheet selection described below. Its access key is a persistent credential stored in localStorage; the token-storage statements below apply only to Google sign-in mode.
 
-A small, installable phone app for two parents to log bottle feeds, breastfeeding, and pumping sessions in one private Google Sheet. Plain HTML, CSS, and JavaScript; no package dependencies or paid server. Includes a GitHub Pages deployment workflow.
+A small, installable phone app for two parents to log sleep, bottle feeds, breastfeeding, and pumping sessions in one private Google Sheet. It uses plain HTML, CSS, and JavaScript and includes a GitHub Pages deployment workflow.
 
 ## What is ready
 
 - Bottle amount and milk type; breastfeed duration and side; pumping amount, duration, and side.
+- Nap and night sleep entries with an editable wake time, a seven-day sleep schedule, and timelines for sleep, feedings, and pumping.
 - mL or US fluid ounces, optional notes, backdated entries, local-day totals, and recent activity.
 - Google authorization using `drive.file`, limited to files explicitly selected with Google Picker.
 - Manual refresh to update the shared log; entries reload after saving.
@@ -88,7 +89,13 @@ If the installed app uses separate browser storage, enter Settings again there. 
 
 ## Daily use and limits
 
-Select Bottle, Breastfeed, or Pump, enter the time and amount/duration, then Save. Pump amount means the **total expressed volume for that session**, including both sides when Both is selected. Nursing requires duration; other durations are optional. There is no automatic timer. Totals follow each phone’s local calendar day, so phones in different time zones can show different daily totals.
+Select **Sleep**, choose **Nap** or **Night sleep**, and save the bedtime. Leave the wake time blank while the baby sleeps. In **Recent activity → Sleep**, choose **Set wake time** to record when the baby woke. Choose **Edit** to correct either time. You can also enter both times together for a past sleep.
+
+**Schedule & patterns** opens the sleep schedule for today and the preceding six local calendar dates. It averages first naps together, second naps together, and so on. Night sleep uses the first bedtime and last wake for each night, grouping after-midnight returns to bed with the preceding evening. The next nap estimate uses the average start time for the next available nap slot observed on at least two earlier dates. A sleep in progress shows its status until you record the wake time.
+
+The seven timeline rows show when sessions happened. Select a day for exact times. The average row shows how many of the seven days had activity in each hour. Daily averages include empty dates, and ongoing sleep contributes its elapsed time. Use **Activity** to switch to feedings or pumping for their session counts, volumes, and average recorded durations.
+
+For **Bottle**, **Breastfeed**, or **Pump**, enter the start time and amount or duration, then save. Pump amount means the total expressed volume for that session. Nursing requires a duration and has optional per-side timers. Totals follow each phone’s local calendar day.
 
 Sign out clears the app session and forms. It does not sign out your entire Google account or revoke consent. “Forget this phone’s settings” removes local setup; it does not delete the sheet. Revoke consent from your Google Account permissions if desired.
 
@@ -102,12 +109,13 @@ The app shows the latest 100 valid entries but reads the tab for totals; all dat
 | --- | --- |
 | id | Random entry ID |
 | started_at | ISO timestamp stored in UTC |
-| kind | bottle, nursing, or pump |
-| amount_ml | Numeric volume in mL; blank for nursing |
-| duration_minutes | Duration; optional except nursing |
-| detail | Milk type for bottles, side for nursing/pumping |
+| kind | bottle, nursing, pump, or sleep |
+| amount_ml | Numeric volume in mL for bottles and pumping |
+| duration_minutes | Elapsed minutes. For sleep, blank means ongoing and the wake time is the start plus this duration. |
+| detail | Bottle milk type, nursing/pumping side, or sleep type (nap or night) |
 | notes | Literal text (writes use RAW, not formula evaluation) |
 | created_at | ISO timestamp stored in UTC |
+| left_seconds, right_seconds | Recorded nursing timer values |
 
 ## Development and verification
 

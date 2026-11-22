@@ -2,6 +2,56 @@ const { chromium }=require('playwright');
 const assert=require('node:assert/strict');
 const baseURL=process.env.TEST_BASE_URL||'http://127.0.0.1:4173';
 const path=require('node:path'); require('node:fs').mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});
+async function exerciseSleep(page,values){
+ const times=await page.evaluate(()=>{
+   const now=new Date();
+   const local=(days,hour,minute=0)=>new Date(now.getFullYear(),now.getMonth(),now.getDate()-days,hour,minute);
+   const input=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+   return {bed:input(local(2,22)),wake:input(local(1,6)),corrected:input(local(1,7)),naps:[local(5,9),local(4,10)].map(d=>d.toISOString())};
+ });
+ for(const when of times.naps)values.push(['nap-'+when,when,'sleep','',45,'nap','',when,'','']);
+ const feeds=await page.locator('#feedCount').textContent();
+ await page.locator('[data-kind=sleep]').click();
+ await page.locator('#sleepType').selectOption('night');
+ await page.locator('#when').fill(times.bed);
+ await page.locator('#save').click();
+ await page.getByText('Saved to your shared sheet.',{exact:true}).waitFor();
+ const saved=values.at(-1);
+ assert.deepEqual(saved.slice(2,6),['sleep','','','night']);
+ assert.equal(await page.locator('#feedCount').textContent(),feeds);
+ await page.reload();
+ await page.locator('#tracker').waitFor({state:'visible'});
+ await page.locator('#patternsButton').click();
+ await page.getByText('Night sleep in progress',{exact:true}).waitFor();
+ await page.locator('#logViewButton').click();
+ await page.locator('#sleepTab').click();
+ await page.getByRole('button',{name:/Set wake time/}).click();
+ await page.locator('#wake').fill(times.wake);
+ await page.locator('#save').click();
+ await page.getByText('Changes saved to your shared sheet.',{exact:true}).waitFor();
+ assert.equal(values.find(r=>r[0]===saved[0])[4],480);
+ await page.locator('#entries .sleep .editButton').first().click();
+ await page.locator('#wake').fill(times.corrected);
+ await page.locator('#save').click();
+ await page.getByText('Changes saved to your shared sheet.',{exact:true}).waitFor();
+ assert.equal(values.find(r=>r[0]===saved[0])[4],540);
+ await page.locator('#patternsButton').click();
+ assert.equal(await page.locator('#dayTracks .dayRow').count(),7);
+ assert.equal(await page.locator('#averageTrack span').count(),24);
+ assert.equal(await page.locator('#dayTracks .night').count(),2);
+ assert.match(await page.locator('#napBasis').textContent(),/nap 1 start times from 2 days/);
+ assert.match(await page.locator('#scheduleTable tbody').textContent(),/Nap 1.*Night sleep/);
+ await page.locator('#dayTracks .dayRow').nth(5).click();
+ assert.match(await page.locator('#dayDetails').textContent(),/Night sleep.*9h/);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.screenshot({path:path.join(__dirname,'../test-results/sleep-schedule.png'),fullPage:true});
+ await page.locator('#patternGroup').selectOption('feed');
+ assert.equal(await page.locator('#scheduleSection').isVisible(),false);
+ assert.match(await page.locator('#patternStats').textContent(),/Feeds \/ day/);
+ await page.locator('#patternGroup').selectOption('pump');
+ assert.match(await page.locator('#patternStats').textContent(),/Pumped \/ day/);
+ await page.locator('#logViewButton').click();
+}
 (async()=>{
 const browser=await chromium.launch({headless:true,channel:'msedge'});
 const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
@@ -65,15 +115,16 @@ assert.equal(await page.evaluate(()=>sessionStorage.getItem('little-log.session.
 deny=false;
 await page.getByRole('button',{name:'Connect with Google'}).click();await page.locator('#tracker').waitFor({state:'visible'});
 assert.deepEqual(errors,[]);console.log('PASS: mobile layout, Google mock flow, bottle/nursing/pump saves, literal notes, no token in localStorage, ambiguous append reconciliation, offline controls, denied access, sign-out.');
+await exerciseSleep(page,values);assert.deepEqual(errors,[]);
 await context.close();
 const scriptContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
 const scriptPage=await scriptContext.newPage();const scriptErrors=[];scriptPage.on('pageerror',e=>scriptErrors.push(e.message));
 await scriptPage.route('https://accounts.google.com/**',r=>r.abort());await scriptPage.route('https://apis.google.com/**',r=>r.abort());
-let scriptValues=[['id','started_at','kind','amount_ml','duration_minutes','detail','notes','created_at','left_seconds','right_seconds']],scriptWrites=0;
+let scriptValues=[['id','started_at','kind','amount_ml','duration_minutes','detail','notes','created_at','left_seconds','right_seconds']],scriptWrites=0,supportsSleep=false;
 await scriptPage.route('https://script.google.com/macros/s/TEST_DEPLOYMENT/exec',async r=>{
  const request=r.request().postDataJSON();assert.equal(r.request().method(),'POST');assert.match(r.request().headers()['content-type'],/^text\/plain/);assert.ok(!r.request().url().includes('key='));
  if(request.key!=='a'.repeat(64))return r.fulfill({json:{ok:false,code:'unauthorized',error:'Access key rejected.'}});
- if(request.action==='read')return r.fulfill({json:{ok:true,sheetId:'TEST_SHEET',values:scriptValues}});
+ if(request.action==='read')return r.fulfill({json:{ok:true,sheetId:'TEST_SHEET',values:scriptValues,supportsSleep:supportsSleep||undefined}});
  if(request.action==='append'){scriptWrites++;scriptValues.push(request.row);}
  if(request.action==='edit'){const i=scriptValues.findIndex(row=>row[0]===request.row[0]);assert.deepEqual(scriptValues[i],request.original);scriptValues[i]=request.row;}
  return r.fulfill({json:{ok:true}});
@@ -82,8 +133,12 @@ await scriptPage.goto(baseURL);await scriptPage.locator('#settingsButton').click
 assert.equal(await scriptPage.locator('#entryForm').isVisible(),false);await scriptPage.getByRole('button',{name:'Bottle',exact:true}).click();await scriptPage.locator('#amount').fill('60');await scriptPage.locator('#save').click();await scriptPage.getByText('Saved to your shared sheet.',{exact:true}).waitFor();assert.equal(scriptWrites,1);
 await scriptPage.evaluate(()=>sessionStorage.clear());await scriptPage.reload();await scriptPage.locator('#tracker').waitFor({state:'visible'});assert.equal(await scriptPage.locator('#feedCount').textContent(),'1');assert.equal(await scriptPage.locator('#chooseSheet').isVisible(),false);
 await scriptPage.locator('.editButton').first().click();await scriptPage.locator('#notes').fill('Script edit');await scriptPage.locator('#save').click();await scriptPage.getByText('Changes saved to your shared sheet.',{exact:true}).waitFor();assert.equal(scriptValues[1][6],'Script edit');
+await scriptPage.locator('[data-kind=sleep]').click();await scriptPage.locator('#save').click();
+await scriptPage.getByText(/Sleep logging needs the updated Apps Script/).waitFor();assert.equal(scriptWrites,1);
+supportsSleep=true;await scriptPage.locator('#refresh').click();await scriptPage.getByText('Your shared log is up to date.',{exact:true}).waitFor();
+await exerciseSleep(scriptPage,scriptValues);console.log('PASS: sleep start, reload, wake, correction and seven-day patterns in both storage modes.');
 await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#accessKey').fill('b'.repeat(64));await scriptPage.getByRole('button',{name:'Save settings',exact:true}).click();await scriptPage.getByText('Access key rejected.',{exact:true}).waitFor();assert.equal(await scriptPage.locator('#tracker').isVisible(),false);
 await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#forget').click();assert.equal(await scriptPage.evaluate(()=>localStorage.getItem('little-log.settings.v1')),null);assert.deepEqual(scriptErrors,[]);await scriptContext.close();console.log('PASS: Apps Script setup, POST key transport, save, fresh-session reconnect, edit, wrong-key rejection, forget settings.');
-const shell=await browser.newContext();const p=await shell.newPage();await p.goto(baseURL);await p.evaluate(()=>navigator.serviceWorker.ready);await p.reload();await shell.setOffline(true);await p.reload();assert.equal(await p.title(),'Milky Way');const cacheUrls=await p.evaluate(async()=>{const cache=await caches.open('little-log-shell-v11');return (await cache.keys()).map(r=>r.url)});assert.equal(cacheUrls.length,10);assert.ok(cacheUrls.every(u=>u.startsWith(baseURL+'/')));console.log('PASS: offline shell and cache allowlist.');
+const shell=await browser.newContext();const p=await shell.newPage();await p.goto(baseURL);await p.evaluate(()=>navigator.serviceWorker.ready);await p.reload();await shell.setOffline(true);await p.reload();assert.equal(await p.title(),'Milky Way');const cacheUrls=await p.evaluate(async()=>{const name=(await caches.keys()).find(key=>key.startsWith('little-log-shell-'));const cache=await caches.open(name);return (await cache.keys()).map(r=>r.url)});assert.equal(cacheUrls.length,12);assert.ok(cacheUrls.some(u=>u.endsWith("/patterns-view.js")));assert.ok(cacheUrls.every(u=>u.startsWith(baseURL+'/')));console.log('PASS: offline shell and cache allowlist.');
 await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

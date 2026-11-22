@@ -36,6 +36,8 @@ To revoke access, replace `ACCESS_KEY` in Script Properties with a newly generat
 
 For script code updates, use **Deploy → Manage deployments → Edit → Version: New version → Deploy** to keep the same endpoint. Closing and reopening the PWA activates an updated service worker.
 
+To enable sleep tracking on an existing deployment, replace the script with the current [Code.gs](Code.gs), deploy a new version, and tap **Refresh** in the app. Sleep uses the existing columns. You can keep your sheet, deployment URL, and access key.
+
 The script serializes its writes, rejects duplicate IDs with different contents, and compares the original row before edits to prevent two phones overwriting each other. Direct edits in Google Sheets do not participate in the script lock; avoid editing the sheet at the same moment as saving in the app. Internet is still required. A timed-out save is ambiguous: press Save again to check the existing entry rather than reloading and reentering it.
 
 ## Troubleshooting

@@ -28,7 +28,7 @@ function doPost(e) {
         values[0] = LOG_HEADER;
       }
     }
-    if (request.action === 'read') return reply_({ok:true,sheetId,values});
+    if (request.action === 'read') return reply_({ok:true,sheetId,values,supportsSleep:true});
     validateRow_(request.row);
     const matches = values.map((row,i)=>i>0&&row[0]===request.row[0]?i:-1).filter(i=>i>=0);
     if (request.action === 'append') {
@@ -36,27 +36,43 @@ function doPost(e) {
         if (matches.length!==1 || !sameRow_(values[matches[0]],request.row)) throw Error('Entry ID already exists with different data. Refresh and check the sheet.');
         return reply_({ok:true});
       }
+      checkSleepOverlap_(values,request.row);
       Sheets.Spreadsheets.Values.append({values:[request.row]},sheetId,"'BabyLog'!A:J",{valueInputOption:'RAW',insertDataOption:'INSERT_ROWS'});
     } else {
       if (!Array.isArray(request.original) || request.original[0]!==request.row[0] || matches.length!==1) throw Error('Entry removed or duplicated. Cancel editing and refresh.');
       const index = matches[0];
       if (!sameRow_(values[index],request.original)) throw Error('This entry changed on another device. Cancel editing and refresh.');
       if (request.row[7]!==values[index][7]) throw Error('Creation time cannot be changed.');
+      checkSleepOverlap_(values,request.row);
       Sheets.Spreadsheets.Values.update({values:[request.row]},sheetId,"'BabyLog'!A"+(index+1)+':J'+(index+1),{valueInputOption:'RAW'});
     }
     return reply_({ok:true});
   } catch(error) {
     // Do not log request bodies or return Google diagnostics containing credentials.
     const message = String(error.message || 'Request failed.');
-    return reply_({ok:false,error:message.startsWith('API call')||message.startsWith('Exception')?'Google Sheets request failed. Check script setup and refresh before retrying.':message});
+    return reply_({ok:false,code:error.code==='sleep_overlap'?'sleep_overlap':undefined,error:message.startsWith('API call')||message.startsWith('Exception')?'Google Sheets request failed. Check script setup and refresh before retrying.':message});
   } finally { if (lock && lock.hasLock()) lock.releaseLock(); }
 }
 
 function reply_(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
 function sameRow_(a,b) { return Array.from({length:10},(_,i)=>String(a[i]??'')).every((v,i)=>v===String(b[i]??'')); }
+function checkSleepOverlap_(values,row) {
+  if (row[2]!=='sleep') return;
+  const end=r=>r[4]===''||r[4]==null?Infinity:Date.parse(r[1])+Number(r[4])*60000;
+  if (values.some(r=>r[2]==='sleep'&&r[0]!==row[0]&&Date.parse(r[1])<end(row)&&end(r)>Date.parse(row[1]))) {
+    const error=Error('These times overlap another sleep entry. Check its bedtime and wake time.');
+    error.code='sleep_overlap';
+    throw error;
+  }
+}
 function validateRow_(row) {
   if (!Array.isArray(row)||row.length!==10||row.some(v=>typeof v!=='string'&&typeof v!=='number')||typeof row[0]!=='string'||!/^[\w-]{1,100}$/.test(row[0])) throw Error('Invalid entry.');
-  if (!['bottle','nursing','pump'].includes(row[2])||![row[1],row[7]].every(v=>typeof v==='string'&&Number.isFinite(Date.parse(v)))||Date.parse(row[1])>Date.now()+60000) throw Error('Invalid entry time or type.');
+  if (!['bottle','nursing','pump','sleep'].includes(row[2])||![row[1],row[7]].every(v=>typeof v==='string'&&Number.isFinite(Date.parse(v)))||Date.parse(row[1])>Date.now()+60000) throw Error('Invalid entry time or type.');
+  if (row[2]==='sleep') {
+    if (!['nap','night'].includes(row[5])||row[3]!==''||typeof row[6]!=='string'||row[6].length>500||row[8]!==''||row[9]!=='') throw Error('Invalid sleep entry.');
+    if (row[4]!==''&&(!Number.isInteger(row[4])||row[4]<1||Date.parse(row[1])+row[4]*60000>Date.now())) throw Error('Choose a wake time after bedtime and no later than now.');
+    return;
+  }
   if (row[2]==='nursing'?row[3]!=='':typeof row[3]!=='number'||!Number.isFinite(row[3])||row[3]<=0||row[3]>5000) throw Error('Invalid amount.');
   if (row[4]===''?row[2]==='nursing':!Number.isInteger(row[4])||row[4]<1||row[4]>1440) throw Error('Invalid duration.');
   if (!(row[2]==='bottle'?['breast milk','formula','mixed']:['left','right','both']).includes(row[5])||typeof row[6]!=='string'||row[6].length>500) throw Error('Invalid detail or notes.');
