@@ -25,6 +25,8 @@ async function exerciseSleep(page,values){
  await page.getByText('Night sleep in progress',{exact:true}).waitFor();
  await page.locator('#logViewButton').click();
  await page.locator('#sleepTab').click();
+ const wakeNow=page.getByRole('button',{name:/^Wake Now/});
+ assert.equal(await wakeNow.count(),0);
  await page.getByRole('button',{name:/Set wake time/}).click();
  await page.locator('#wake').fill(times.wake);
  await page.locator('#save').click();
@@ -33,6 +35,7 @@ async function exerciseSleep(page,values){
  await page.locator('#entries .sleep .editButton').first().click();
  await page.locator('#wake').fill(times.corrected);
  await page.locator('#save').click();
+ await page.locator('#entryForm').waitFor({state:'hidden'});
  await page.getByText('Changes saved to your shared sheet.',{exact:true}).waitFor();
  assert.equal(values.find(r=>r[0]===saved[0])[4],540);
  await page.locator('#patternsButton').click();
@@ -51,6 +54,48 @@ async function exerciseSleep(page,values){
  await page.locator('#patternGroup').selectOption('pump');
  assert.match(await page.locator('#patternStats').textContent(),/Pumped \/ day/);
  await page.locator('#logViewButton').click();
+
+ const now=await page.evaluate(()=>Date.now());
+ const bedtime=new Date(now-40*60000-45000).toISOString();
+ const nap=['quick-nap',bedtime,'sleep','','','nap','Stroller nap',bedtime];
+ values.push(nap);
+ await page.locator('#refresh').click();
+ await wakeNow.waitFor();
+ const manual=await page.getByRole('button',{name:/^Set wake time/}).boundingBox();
+ const quick=await wakeNow.boundingBox();
+ assert.equal(quick.y,manual.y);
+ assert.ok(quick.x>=manual.x+manual.width);
+ await page.locator('[data-kind=bottle]').click();
+ await page.locator('#notes').fill('Bottle draft');
+ await page.clock.setFixedTime(now+2*60000);
+ const rowCount=values.length;
+ await wakeNow.click();
+ await page.getByText('Wake time saved.',{exact:true}).waitFor();
+ assert.equal(values.length,rowCount);
+ assert.deepEqual(values.at(-1),[...nap.slice(0,4),42,...nap.slice(5),'','']);
+ const finished=page.locator('#entries article').filter({hasText:'Stroller nap'});
+ assert.match(await finished.textContent(),/Woke /);
+ assert.equal(await finished.getByRole('button',{name:/^Edit/}).count(),1);
+ assert.equal(await wakeNow.count(),0);
+ assert.equal(await page.locator('#notes').inputValue(),'Bottle draft');
+ assert.equal(await page.getByRole('button',{name:'Save bottle',exact:true}).isVisible(),true);
+ await page.locator('#notes').fill('');
+
+ const secondBedtime=new Date(now+2*60000).toISOString();
+ const secondNap=['stale-nap',secondBedtime,'sleep','','','nap','Afternoon nap',secondBedtime];
+ values.push(secondNap);
+ await page.locator('#refresh').click();
+ await wakeNow.waitFor();
+ await page.clock.setFixedTime(now+22*60000);
+ // The other caregiver ends the nap while this page still shows it in progress.
+ const otherCaregiverRow=[...secondNap];
+ otherCaregiverRow[4]=12;
+ values[values.length-1]=otherCaregiverRow;
+ await wakeNow.click();
+ await page.getByText('This nap already has a wake time. Showing the saved time.',{exact:true}).waitFor();
+ assert.deepEqual(values.at(-1),otherCaregiverRow);
+ assert.equal(await wakeNow.count(),0);
+ assert.match(await page.locator('#entries article').filter({hasText:'Afternoon nap'}).textContent(),/12 min/);
 }
 (async()=>{
 const browser=await chromium.launch({headless:true,channel:'msedge'});
@@ -126,7 +171,12 @@ await scriptPage.route('https://script.google.com/macros/s/TEST_DEPLOYMENT/exec'
  if(request.key!=='a'.repeat(64))return r.fulfill({json:{ok:false,code:'unauthorized',error:'Access key rejected.'}});
  if(request.action==='read')return r.fulfill({json:{ok:true,sheetId:'TEST_SHEET',values:scriptValues,supportsSleep:supportsSleep||undefined}});
  if(request.action==='append'){scriptWrites++;scriptValues.push(request.row);}
- if(request.action==='edit'){const i=scriptValues.findIndex(row=>row[0]===request.row[0]);assert.deepEqual(scriptValues[i],request.original);scriptValues[i]=request.row;}
+ if(request.action==='edit'){
+   const i=scriptValues.findIndex(row=>row[0]===request.row[0]);
+   if(!scriptValues[i].every((value,column)=>value===request.original[column]))
+     return r.fulfill({json:{ok:false,error:'This entry changed on another device. Cancel editing and refresh.'}});
+   scriptValues[i]=request.row;
+ }
  return r.fulfill({json:{ok:true}});
 });
 await scriptPage.goto(baseURL);await scriptPage.locator('#settingsButton').click();await scriptPage.locator('#scriptUrl').fill('https://script.google.com/macros/s/TEST_DEPLOYMENT/exec');await scriptPage.locator('#accessKey').fill('a'.repeat(64));await scriptPage.getByRole('button',{name:'Save settings',exact:true}).click();await scriptPage.locator('#tracker').waitFor({state:'visible'});

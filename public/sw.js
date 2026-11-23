@@ -1,4 +1,4 @@
-const CACHE='little-log-shell-v13';
+const CACHE='little-log-shell-v14';
 const ASSETS=['./','./index.html','./style.css','./app.js','./model.js','./patterns.js','./patterns-view.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./privacy.html'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new Request(path,{cache:'reload'}))))));
 self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')self.skipWaiting();});

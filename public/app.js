@@ -59,7 +59,9 @@ function paint(){
   $('connection').textContent=!navigator.onLine?'Offline':ready?'Shared sheet connected':token?'Choose your sheet':'Not connected';
   $('kindFields').disabled=busy; $('entryFields').disabled=busy; $('save').disabled=!ready||!navigator.onLine; $('cancelEdit').disabled=busy;
   $('refresh').disabled=$('patternRefresh').disabled=busy||!ready||!navigator.onLine;
-  for(const button of document.querySelectorAll('.editButton'))button.disabled=busy||!!pending;
+  for(const button of document.querySelectorAll('.editButton')){
+    button.disabled=busy||!!pending||(button.classList.contains('wakeNow')&&!navigator.onLine);
+  }
   for(const id of ['signIn','chooseSheet','settingsButton','signOut'])$(id).disabled=busy;
 }
 function clearLog(){
@@ -144,7 +146,28 @@ function render(){
     title.textContent=sleep?(entry.detail==='nap'?'Nap':'Night sleep')+' · '+(wake?durationText(entry.minutes):'In progress'):({bottle:'Bottle',nursing:'Breastfeed',pump:'Pumping'}[entry.kind])+' · '+(entry.kind==='nursing'?`${entry.minutes} min`:volume(entry.amount,unit));
     const time=document.createElement('p');time.className='muted small';time.textContent=new Date(entry.when).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
     const detail=document.createElement('p');detail.className='small';detail.textContent=sleep?(wake?'Woke '+wake.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Wake time pending'):entry.detail+(entry.kind!=='nursing'&&entry.minutes?` · ${entry.minutes} min`:'');
-    body.append(title,time,detail);if(entry.left||entry.right){const sides=document.createElement('p');sides.className='small';sides.textContent=`Left ${clock(entry.left)} · Right ${clock(entry.right)}`;body.append(sides);}const edit=document.createElement('button');edit.className='quiet editButton';edit.textContent=sleep&&!wake?'Set wake time':'Edit';edit.setAttribute('aria-label',edit.textContent+' · '+title.textContent+' '+time.textContent);edit.disabled=busy||!!pending;edit.onclick=()=>startEdit(entry);body.append(edit);if(entry.notes){const note=document.createElement('p');note.className='notes small';note.textContent=entry.notes;body.append(note);}article.append(symbol,body);$('entries').append(article);
+    body.append(title,time,detail);
+    if(entry.left||entry.right){const sides=document.createElement('p');sides.className='small';sides.textContent=`Left ${clock(entry.left)} · Right ${clock(entry.right)}`;body.append(sides);}
+    const actions=document.createElement('div');
+    actions.className='entryActions';
+    const edit=document.createElement('button');
+    edit.className='quiet editButton';
+    edit.textContent=sleep&&!wake?'Set wake time':'Edit';
+    const entryLabel=' · '+title.textContent+' '+time.textContent;
+    edit.setAttribute('aria-label',edit.textContent+entryLabel);
+    edit.onclick=()=>startEdit(entry);
+    actions.append(edit);
+    if(sleep&&entry.detail==='nap'&&!wake&&supportsSleep){
+      const button=document.createElement('button');
+      button.className='secondary editButton wakeNow';
+      button.textContent='Wake Now';
+      button.setAttribute('aria-label',button.textContent+entryLabel);
+      button.onclick=()=>run(()=>wakeNapNow(entry));
+      actions.append(button);
+    }
+    body.append(actions);
+    if(entry.notes){const note=document.createElement('p');note.className='notes small';note.textContent=entry.notes;body.append(note);}
+    article.append(symbol,body);$('entries').append(article);
   }
   if(visible.length>100){const p=document.createElement('p');p.textContent='Showing the latest 100 entries. All entries are in your sheet.';$('entries').append(p);}paint();
 }
@@ -168,6 +191,38 @@ function setKind(value){
 }
 for(const b of document.querySelectorAll('[data-kind]'))b.onclick=()=>{if(nursingStarted&&b.dataset.kind!=='nursing'){say('Save the breastfeeding session or reset its timers before switching type.',true);return;}setKind(b.dataset.kind);};
 $('unit').onchange=()=>{config.unit=$('unit').value;try{persist();}catch{say('This browser could not remember your unit preference.',true);}if(ready)render();};
+async function saveEdit(row,original){
+  if(scriptMode()){
+    await scriptApi('edit',{row,original});
+    return;
+  }
+  const latest=await api(`${sheetBase()}/values/${range}`);
+  const rowNumber=editRowIndex(latest.values,original);
+  checkSleepOverlap(parseRows(latest.values),row);
+  try{await api(`${sheetBase()}/values/${encodeURIComponent(`'${TAB}'!A${rowNumber}:J${rowNumber}`)}?valueInputOption=RAW`,{method:'PUT',body:JSON.stringify({values:[row]})});}
+  catch(error){throw Error(error.message+' Edit not confirmed. Refresh and inspect the entry before retrying.');}
+}
+async function wakeNapNow(entry){
+  if(editing?.id===entry.id)throw Error('Save or cancel your edits to this nap first.');
+  // Sleep durations use whole minutes. Rounding up could put the wake time in the future.
+  const minutes=Math.floor((Date.now()-Date.parse(entry.when))/60000);
+  if(minutes<1)throw Error('The nap must be at least one minute long to record a wake time.');
+  // Sheets omits trailing empty cells, while Apps Script expects all ten columns.
+  const row=Array.from({length:10},(_,i)=>entry.raw[i]??'');
+  row[4]=minutes;
+  try{await saveEdit(row,entry.raw);}
+  catch(error){
+    if(!ready)throw error;
+    // A rejected or unconfirmed edit may already have a wake time in the shared log.
+    try{await load();}catch{throw error;}
+    const latest=rows.find(r=>r.id===entry.id&&r.kind==='sleep'&&r.detail==='nap');
+    if(!latest||!wakeTime(latest))throw error;
+    say('This nap already has a wake time. Showing the saved time.');
+    return;
+  }
+  try{await load();say('Wake time saved.');}
+  catch(error){say('Wake time saved. '+error.message,true);}
+}
 $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
   requireSession();
   // Never automatically repeat an ambiguous append. Reconcile the previous ID first.
@@ -182,14 +237,7 @@ $('entryForm').onsubmit=event=>{event.preventDefault();run(async()=>{
   row.push(kind==='nursing'&&nursingStarted?timerSeconds(nursing.left):'',kind==='nursing'&&nursingStarted?timerSeconds(nursing.right):'');
   if(editing){
     row[7]=editing.raw[7];
-    if(scriptMode()){
-      await scriptApi('edit',{row,original:editing.raw});
-      resetEntry();await load();say('Changes saved to your shared sheet.');return;
-    }
-    const latest=await api(`${sheetBase()}/values/${range}`);checkSleepOverlap(parseRows(latest.values),row);
-    const rowNumber=editRowIndex(latest.values,editing.raw);
-    try{await api(`${sheetBase()}/values/${encodeURIComponent(`'${TAB}'!A${rowNumber}:J${rowNumber}`)}?valueInputOption=RAW`,{method:'PUT',body:JSON.stringify({values:[row]})});}
-    catch(error){throw Error(error.message+' Edit not confirmed. Refresh and inspect the entry before retrying.');}
+    await saveEdit(row,editing.raw);
     resetEntry();await load();say('Changes saved to your shared sheet.');return;
   }
   if(kind==='sleep'&&!scriptMode()){

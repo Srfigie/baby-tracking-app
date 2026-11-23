@@ -26,6 +26,8 @@ header{gap:10px;flex-wrap:wrap}.brand{margin-right:auto}.since{margin-bottom:24p
 .patterns{--grid:#d7dfeb;--wash:#f1f4fa;--ink:#40547d;--active:#e7edf8;--nap:#36776f;--night:#62549a;--bottle:#3b73a1;--nursing:#36776f;--pump:#a45729}
 [data-theme=dark] .patterns{--grid:#45516a;--wash:#212d45;--ink:#b7c9f1;--active:#2d3a55;--nap:#7dc8bc;--night:#b2a4e8;--bottle:#86b7e0;--nursing:#7dc8bc;--pump:#eba978}
 .entry.sleep .symbol{background:#eae5f6}
+.entryActions{display:flex;gap:8px}
+@media(max-width:420px){.entryActions .editButton{padding-inline:10px}}
 [data-theme=dark] .entry.sleep .symbol{background:#39344f}
 .patternsHead{display:flex;gap:16px;justify-content:space-between;align-items:center}
 .patternsHead h2,.patternsHead p,.patternsHead label{margin:0}

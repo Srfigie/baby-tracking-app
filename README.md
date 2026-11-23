@@ -89,7 +89,7 @@ If the installed app uses separate browser storage, enter Settings again there. 
 
 ## Daily use and limits
 
-Select **Sleep**, choose **Nap** or **Night sleep**, and save the bedtime. Leave the wake time blank while the baby sleeps. In **Recent activity → Sleep**, choose **Set wake time** to record when the baby woke. Choose **Edit** to correct either time. You can also enter both times together for a past sleep.
+Select **Sleep**, choose **Nap** or **Night sleep**, and save the bedtime. Leave the wake time blank while the baby sleeps. In **Recent activity → Sleep**, tap **Wake Now** on an in-progress nap to record the current time in one tap. Use **Set wake time** to enter a specific time for a nap or night sleep. Choose **Edit** to correct either time. You can also enter both times together for a past sleep.
 
 **Schedule & patterns** opens the sleep schedule for today and the preceding six local calendar dates. It averages first naps together, second naps together, and so on. Night sleep uses the first bedtime and last wake for each night, grouping after-midnight returns to bed with the preceding evening. The next nap estimate uses the average start time for the next available nap slot observed on at least two earlier dates. A sleep in progress shows its status until you record the wake time.
 
